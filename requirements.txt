@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+langchain>=0.3.0,<1.0.0
+langchain-openai>=0.2.0
+langchain-google-genai>=2.0.0
+langchain-community>=0.3.0,<1.0.0
+chromadb
+atlassian-python-api
+pydantic-settings
+beautifulsoup4
+lxml
+python-dotenv
