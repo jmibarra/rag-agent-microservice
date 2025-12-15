@@ -17,16 +17,16 @@ def _format_chat_history(history: list) -> list:
     return messages
 
 def generate_response(query: str, chat_history: list = None):
-    # Initialize LLM and Vector Store
+    # Inicializo el LLM y el vector store
     llm = LLMFactory.create_llm()
     vector_store = get_vector_store()
     retriever = vector_store.as_retriever(search_kwargs={"k": 4})
 
-    # Prepare chat history
+    # Preparo el historial del chat
     formatted_history = _format_chat_history(chat_history or [])
 
-    # 1. Contextualize question prompt
-    # This chain handles rephrasing the question if there is history
+    # 1. Contextualizo la pregunta y agrego la historia al retriever
+    # Esta cadena maneja la reformulación de la pregunta si hay historia
     if formatted_history:
         contextualize_q_system_prompt = (
             "Given a chat history and the latest user question "
@@ -46,12 +46,6 @@ def generate_response(query: str, chat_history: list = None):
             llm, retriever, contextualize_q_prompt
         )
     else:
-        # If no history, just use the plain retriever, effectively standard RAG
-        # However, for consistency in the pipeline below we can still use the wrapper
-        # or just treat the 'retriever' as is. 
-        # To simplify code paths, we'll just use the base retriever if no history 
-        # is strictly required, but create_history_aware_retriever works fine even with empty history.
-        # Let's stick to the pattern to handle future history seamlessly.
         contextualize_q_system_prompt = (
             "Given a chat history and the latest user question "
             "which might reference context in the chat history, "
@@ -70,10 +64,12 @@ def generate_response(query: str, chat_history: list = None):
             llm, retriever, contextualize_q_prompt
         )
 
-    # 2. Answer question prompt
+    # 2. Creo el prompt de respuesta a la pregunta
     system_prompt = (
-        "Use the following pieces of context to answer the question at the end. "
-        "If you don't know the answer, just say that you don't know, don't try to make up an answer."
+        "You are an assistant for passing questions about the company's internal documentation. "
+        "Use the following pieces of retrieved context to answer the question at the end. "
+        "If you don't know the answer, just say that you don't know, don't try to make up an answer. "
+        "IMPORTANT: You must ALWAYs answer in Spanish, regardless of the input language."
         "\n\n"
         "{context}"
     )
@@ -86,11 +82,10 @@ def generate_response(query: str, chat_history: list = None):
         ]
     )
 
-    # Create the RAG chain
+    # Creo el RAG chain
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
     
-    # Invoke
     result = rag_chain.invoke({
         "input": query,
         "chat_history": formatted_history

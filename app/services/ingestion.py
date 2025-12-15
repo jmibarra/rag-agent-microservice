@@ -20,6 +20,5 @@ def ingest_confluence(space_key: str, limit: int = 50):
     
     vector_store = get_vector_store()
     vector_store.add_documents(texts)
-    vector_store.persist()
     
     return {"status": "success", "documents_processed": len(documents), "chunks_created": len(texts)}
