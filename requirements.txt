@@ -10,3 +10,4 @@ pydantic-settings
 beautifulsoup4
 lxml
 python-dotenv
+langchain-chroma
