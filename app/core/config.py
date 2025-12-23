@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     API_KEY: str
     TWILIO_AUTH_TOKEN: str | None = None
 
+    # Jira
+    JIRA_URL: str | None = None
+    JIRA_USERNAME: str | None = None
+    JIRA_API_TOKEN: str | None = None
+    JIRA_ALLOWED_PROJECTS: list[str] = []
+
     # Vector DB
     CHROMA_PERSIST_DIRECTORY: str = "data/chroma"
 

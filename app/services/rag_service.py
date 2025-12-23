@@ -86,8 +86,40 @@ def generate_response(query: str, chat_history: list = None):
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
     
+    # -- JIRA INTEGRATION --
+    import re
+    from app.services.jira_service import jira_service
+
+    # Detectar keys tipo PROJECT-123
+    jira_context = ""
+    # Busca patrones de 2+ mayúsculas, guión y dígitos
+    keys = re.findall(r'\b[A-Z]{2,}-\d+\b', query)
+    if keys:
+        jira_infos = []
+        for key in keys:
+            info = jira_service.get_issue_details(key)
+            print(f" [DEBUG JIRA] Key: {key} | Result: {info}")
+            if info:
+                jira_infos.append(info)
+            else:
+                # Explicitly inform the model that the ticket was searched but not found/allowed
+                jira_infos.append(f"Jira Ticket {key}: Information NOT found. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS').")
+        
+        if jira_infos:
+            jira_context = "\n\n[INFORMACIÓN EN TIEMPO REAL / SYSTEM NOTICES]:\n" + "\n---\n".join(jira_infos)
+    
+    # Inyectamos el contexto de Jira en la query o como variable extra.
+    # Dado que create_retrieval_chain espera 'input', podemos enriquecer el input
+    # pero eso afectaría al retriever (buscaría cosas de Jira en Confluence).
+    # Estrategia: Modificar el input SOLO para la generation, pero el retriever usa el input original.
+    # Sin embargo, el create_retrieval_chain orquesta todo.
+    # Mejor estrategia simple: Append al input. El retriever buscará sobre los tickets también (lo cual no es malo,
+    # puede hallar docs relacionados) y el LLM tendrá la info explícita al final.
+    
+    full_input = query + jira_context
+
     result = rag_chain.invoke({
-        "input": query,
+        "input": full_input,
         "chat_history": formatted_history
     })
     
