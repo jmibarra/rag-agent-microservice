@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     # Security
     API_KEY: str
+    TWILIO_AUTH_TOKEN: str | None = None
 
     # Vector DB
     CHROMA_PERSIST_DIRECTORY: str = "data/chroma"

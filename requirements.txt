@@ -12,3 +12,5 @@ beautifulsoup4
 lxml
 python-dotenv
 langchain-chroma
+twilio
+python-multipart
