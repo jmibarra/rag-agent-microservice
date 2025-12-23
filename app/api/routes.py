@@ -68,7 +68,15 @@ async def webhook(request: Request):
     print(f"New message from {sender_id}: {message_body}")
 
     resp = MessagingResponse()
-    resp.message(f"Hola! [{sender_id}] tu mensaje es: {message_body}")
+    
+    try:
+        # Call the RAG agent
+        agent_response = generate_response(query=message_body)
+        answer = agent_response["answer"]
+        resp.message(answer)
+    except Exception as e:
+        print(f"Error generating response: {e}")
+        resp.message("Lo siento, hubo un error procesando tu mensaje.")
 
     return Response(content=str(resp), media_type="application/xml")
 
