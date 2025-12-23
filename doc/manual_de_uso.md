@@ -19,6 +19,7 @@ Verifica que el archivo `.env` tenga las claves configuradas correctamente:
 - `API_KEY`: La clave de seguridad para las peticiones (Header `X-API-KEY`).
 - `OPENAI_API_KEY` o `GOOGLE_API_KEY`.
 - Credenciales de Confluence (`CONFLUENCE_URL`, `CONFLUENCE_USERNAME`, `CONFLUENCE_API_TOKEN`).
+- `TWILIO_AUTH_TOKEN`: Token de autenticación de Twilio para validar webhooks.
 
 ## 2. Iniciar el Servidor
 
@@ -73,6 +74,28 @@ curl -X POST http://localhost:8000/api/v1/chat \
     "history": []
   }'
 ```
+
+### C. Webhook (WhatsApp/Twilio)
+
+Este endpoint recibe mensajes de WhatsApp vía Twilio, consulta al agente y responde.
+
+- **Endpoint**: `POST /api/v1/webhook`
+- **Seguridad**: Valida la firma de Twilio (`X-Twilio-Signature`) usando `TWILIO_AUTH_TOKEN`.
+- **Formato**: `application/x-www-form-urlencoded`.
+
+**Prueba Local (con token configurado):**
+
+Si tienes `TWILIO_AUTH_TOKEN` en tu `.env`, Twilio rechazará peticiones sin firma válida (esto es correcto). Para probar con `curl`, obtendrás un 403.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/webhook \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "Body=Hola agente&From=+123456789"
+```
+
+_Respuesta esperada (con token activo y sin firma):_ `403 Forbidden`
+
+_Respuesta esperada (sin token configurado o con firma válida):_ XML de Twilio con la respuesta del agente.
 
 ## 4. Solución de Problemas Comunes
 

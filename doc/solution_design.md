@@ -54,6 +54,15 @@ _Entrada_: `{ "message": "...", "history": [...] }`
 4.  **Generar**: Construir el prompt con el contexto recuperado y enviarlo al LLM seleccionado.
 5.  **Responder**: Devolver la respuesta generada.
 
+### 3. Flujo de Webhook (WhatsApp)
+
+_Disparador_: `POST /api/v1/webhook` (desde Twilio).
+
+1.  **Validar**: Verificar firma `X-Twilio-Signature` contra `TWILIO_AUTH_TOKEN`.
+2.  **Procesar**: Extraer cuerpo del mensaje y remitente.
+3.  **Consultar**: Invocar lógica de RAG (`generate_response`).
+4.  **Responder**: Devolver TwiML (XML) con la respuesta para WhatsApp/SMS.
+
 ## Estructura del Proyecto
 
 ```text
@@ -87,6 +96,7 @@ _Entrada_: `{ "message": "...", "history": [...] }`
 - `OPENAI_API_KEY`, `GOOGLE_API_KEY`
 - `CONFLUENCE_URL`, `CONFLUENCE_USERNAME`, `CONFLUENCE_API_TOKEN`
 - `LLM_PROVIDER` (por defecto: openai)
+- `TWILIO_AUTH_TOKEN` (para validación de webhooks)
 - `CHROMA_PERSIST_DIRECTORY` (por defecto: data/chroma)
 
 **Decisiones de Seguridad**:
