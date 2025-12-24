@@ -102,7 +102,7 @@ def generate_response(query: str, chat_history: list = None):
             if info:
                 jira_infos.append(info)
             else:
-                # Explicitly inform the model that the ticket was searched but not found/allowed
+                # Le informo al modelo que el ticket no se encontró para que elabore la respuesta.
                 jira_infos.append(f"Jira Ticket {key}: Information NOT found. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS').")
         
         if jira_infos:
