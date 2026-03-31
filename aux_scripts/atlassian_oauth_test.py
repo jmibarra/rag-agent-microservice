@@ -1,15 +1,21 @@
+import os
+import sys
+
 import requests
 import urllib.parse
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.core.config import settings
+
 # ==========================================
 # CONFIGURACIÓN
 # ==========================================
-CLIENT_ID = 'XXXXXXXXXXXX'
+CLIENT_ID = settings.JSM_CLIENT_ID
 # ¡IMPORTANTE! Asegúrate de que este Secret sea el actual de la consola de Atlassian
-CLIENT_SECRET = 'XXXXXXXXXXXX' 
+CLIENT_SECRET = settings.JSM_CLIENT_SECRET
 # Esta URL debe estar registrada en "Authorization" > "Callback URL" en la consola
 CALLBACK_URL = 'http://localhost:8080/callback' 
 PORT = 8080
