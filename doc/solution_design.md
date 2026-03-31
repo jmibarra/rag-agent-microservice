@@ -63,6 +63,11 @@ _Disparador_: `POST /api/v1/webhook` (desde Twilio).
 3.  **Consultar**: Invocar lógica de RAG (`generate_response`).
 4.  **Responder**: Devolver TwiML (XML) con la respuesta para WhatsApp/SMS.
 
+### 4. Flujo Jira Service Management (CSM) API
+Permite buscar perfiles de clientes de JSM directamente por cualquier campo adicional (Detalle).
+- **Gestión OAuth 2.0**: Automatizada a través de la clase `JsmOAuthManager`. Al iniciarse, lee una semilla (Refresh Token) enviada vía entorno o un Token válido almacenado temporalmente en disco. Antes de realizar peticiones a la API, recicla los Tokens expirados transparentemente.
+- **Consultas (JiraService)**: Abstrae el uso de los Tokens generados para interactuar vía REST con endpoints exclusivos de JSM como `customer/search-by-detail-field`.
+
 ## Estructura del Proyecto
 
 ```text
@@ -78,11 +83,14 @@ _Disparador_: `POST /api/v1/webhook` (desde Twilio).
       security.py     # Validación de API Key
     /services
       __init__.py
-      llm_factory.py  # Lógica del Proveedor de LLM
-      rag_service.py  # Lógica principal RAG (Recuperar + Generar)
-      ingestion.py    # Carga e indexación de Confluence
-    main.py           # Punto de entrada de la aplicación FastAPI
-  /data               # Almacenamiento ChromaDB (Persistente)
+      llm_factory.py     # Lógica del Proveedor de LLM
+      rag_service.py     # Lógica principal RAG (Recuperar + Generar)
+      ingestion.py       # Carga e indexación de Confluence
+      jira_service.py    # Integración con APIs de Atlassian/Jira
+      jsm_auth_manager.py # Autogestión de Tokens (Rotación OAuth 2.0)
+    main.py              # Punto de entrada de la aplicación FastAPI
+  /aux_scripts           # Scripts utilitarios (Pruebas, tests interactivos, utilidades OAuth)
+  /data                  # Almacenamiento persistente (ChromaDB y jsm_tokens.json)
   /doc
     solution_design.md
   .env                # Secretos
@@ -95,6 +103,8 @@ _Disparador_: `POST /api/v1/webhook` (desde Twilio).
 
 - `OPENAI_API_KEY`, `GOOGLE_API_KEY`
 - `CONFLUENCE_URL`, `CONFLUENCE_USERNAME`, `CONFLUENCE_API_TOKEN`
+- `JIRA_URL`, `JIRA_USERNAME`, `JIRA_API_TOKEN`, `JIRA_ALLOWED_PROJECTS`
+- `JSM_CLOUD_ID`, `JSM_CLIENT_ID`, `JSM_CLIENT_SECRET`, `JSM_INITIAL_REFRESH_TOKEN` (Autenticación OAuth 2.0 rotativa para JSM CSM)
 - `LLM_PROVIDER` (por defecto: openai)
 - `TWILIO_AUTH_TOKEN` (para validación de webhooks)
 - `CHROMA_PERSIST_DIRECTORY` (por defecto: data/chroma)

@@ -20,6 +20,15 @@ Verifica que el archivo `.env` tenga las claves configuradas correctamente:
 - `OPENAI_API_KEY` o `GOOGLE_API_KEY`.
 - Credenciales de Confluence (`CONFLUENCE_URL`, `CONFLUENCE_USERNAME`, `CONFLUENCE_API_TOKEN`).
 - `TWILIO_AUTH_TOKEN`: Token de autenticación de Twilio para validar webhooks.
+- Parametría para clientes de Jira Service Management (`JSM_CLOUD_ID`, `JSM_CLIENT_ID`, `JSM_CLIENT_SECRET`, `JSM_INITIAL_REFRESH_TOKEN`).
+
+### 1.1 Autorización de Jira Service Management (OAuth 2.0)
+Para poder usar la integración con JSM (por ejemplo, buscar un usuario por su teléfono), el servicio requiere un Refresh Token inicial:
+1. Asegúrate de tener tu `JSM_CLIENT_ID` y `JSM_CLIENT_SECRET` en el `.env`.
+2. Corre el script interactivo para autorizar la integración por única vez: `python aux_scripts/atlassian_oauth_test.py`.
+3. Esto abrirá tu navegador. Concede los permisos y vuelve a la terminal.
+4. Toma el `Refresh Token` que te devolverá el script en la consola y ponlo en tu variable `JSM_INITIAL_REFRESH_TOKEN`.
+El servicio se encargará a partir de ahora de reciclar el token automáticamente guardando la memoria en `data/jsm_tokens.json`.
 
 ## 2. Iniciar el Servidor
 
@@ -96,6 +105,16 @@ curl -X POST http://localhost:8000/api/v1/webhook \
 _Respuesta esperada (con token activo y sin firma):_ `403 Forbidden`
 
 _Respuesta esperada (sin token configurado o con firma válida):_ XML de Twilio con la respuesta del agente.
+
+### D. Búsqueda de un Cliente en Jira Service Management (CSM)
+Puedes usar scripts sueltos de utilería para testear por consola la conexión a la API de Jira y asegurarte de tener sincronizado tu `JSM_CLOUD_ID`:
+
+1. **Obtener lista de Detail Fields configurados en tu tenant:**
+   `python aux_scripts/list_detail_fields.py`
+   Útil para verificar nombres de campos exactos (ej. _"Teléfono asociado"_ vs _"Teléfono de contacto"_).
+2. **Obtener perfil de Customer a través de ese Detail Field:**
+   `python aux_scripts/test_jira_customer.py`
+   (Edita el valor de búsqueda dentro del archivo `.py` previo a ejecutarlo).
 
 ## 4. Solución de Problemas Comunes
 

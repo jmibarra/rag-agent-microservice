@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     JIRA_API_TOKEN: str | None = None
     JIRA_ALLOWED_PROJECTS: list[str] = []
 
+    # Jira Service Management (CSM)
+    JSM_CLOUD_ID: str | None = None
+    JSM_CLIENT_ID: str | None = None
+    JSM_CLIENT_SECRET: str | None = None
+    JSM_INITIAL_REFRESH_TOKEN: str | None = None
+    JSM_TOKEN_FILE: str = "data/jsm_tokens.json"
+
     # Vector DB
     CHROMA_PERSIST_DIRECTORY: str = "data/chroma"
 
