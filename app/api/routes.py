@@ -66,14 +66,43 @@ async def webhook(request: Request):
     sender_id = form_data.get('From')
 
     print(f"New message from {sender_id}: {message_body}")
+    
+    # 5. Integramos la búsqueda del cliente en JSM
+    # Limpiar el sender_id de Twilio (ej. "whatsapp:+5491156570822" o "+1234567")
+    phone_for_search = sender_id.replace("whatsapp:", "").replace("+", "") if sender_id else ""
+    # Se añade un intento alternativo asumiendo 549 para argentina si es necesario, 
+    # pero usamos el limpio por defecto.
+    
+    from app.services.jira_service import jira_service
+    customer_context = None
+    if phone_for_search:
+        # Intenta buscar por el field "Teléfono de contacto"
+        try:
+            # Primero buscamos limpiando TODO menos los ultimos 10 digitos asumiendo codigo de area (Opcional, pero Twilio lo manda con +549)
+            # Para coincidir con "1156570822", extraemos si es muy largo
+            if len(phone_for_search) > 10 and phone_for_search.startswith("549"):
+                phone_for_search = phone_for_search[3:] # corta el 549
+            
+            customer_data = jira_service.get_customer_by_detail_field("Teléfono de contacto", phone_for_search)
+            if customer_data and customer_data.get("customers"):
+                customer = customer_data["customers"][0]
+                customer_name = customer.get("displayName", customer.get("name", "Unknown"))
+                customer_email = customer.get("email", "No email")
+                customer_context = f"Nombre: {customer_name}, Email: {customer_email}"
+                print(f"Customer identificado via JSM: {customer_context}")
+            else:
+                print(f"Customer no encontrado en JSM para el telefono {phone_for_search}.")
+        except Exception as e:
+            print(f"Error buscando al customer en JSM: {e}")
 
     resp = MessagingResponse()
     
     try:
-        # Call the RAG agent
-        agent_response = generate_response(query=message_body)
-        answer = agent_response["answer"]
-        resp.message(answer)
+        resp.message(f"Hola {customer_context}")
+        # Call the RAG agent passing the customer context
+        #agent_response = generate_response(query=message_body, customer_context=customer_context)
+        #answer = agent_response["answer"]
+        #resp.message(answer)
     except Exception as e:
         print(f"Error generating response: {e}")
         resp.message("Lo siento, hubo un error procesando tu mensaje.")

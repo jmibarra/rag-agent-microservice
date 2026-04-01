@@ -34,7 +34,7 @@ class LLMFactory:
              
              # Aseguramos usar el modelo de embeddings correcto
              return GoogleGenerativeAIEmbeddings(
-                 model="models/text-embedding-004", # 'embedding-001' es legacy, el 004 es mejor y más barato
+                 model="models/gemini-embedding-001",
                  google_api_key=settings.GOOGLE_API_KEY
              )
         else:

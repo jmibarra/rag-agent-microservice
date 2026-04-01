@@ -16,7 +16,7 @@ def _format_chat_history(history: list) -> list:
             messages.append(AIMessage(content=msg.get("content", "")))
     return messages
 
-def generate_response(query: str, chat_history: list = None):
+def generate_response(query: str, chat_history: list = None, customer_context: str = None):
     # Inicializo el LLM y el vector store
     llm = LLMFactory.create_llm()
     vector_store = get_vector_store()
@@ -117,6 +117,11 @@ def generate_response(query: str, chat_history: list = None):
     # puede hallar docs relacionados) y el LLM tendrá la info explícita al final.
     
     full_input = query + jira_context
+    
+    if customer_context:
+        full_input += f"\n\n[CONTEXTO DEL USUARIO]: El mensaje proviene del cliente verificado: {customer_context}. " \
+                      "Puedes dirigirte a este cliente por su nombre de manera cordial."
+
 
     result = rag_chain.invoke({
         "input": full_input,

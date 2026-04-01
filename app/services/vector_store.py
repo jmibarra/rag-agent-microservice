@@ -7,5 +7,5 @@ def get_vector_store():
     return Chroma(
         persist_directory=settings.CHROMA_PERSIST_DIRECTORY,
         embedding_function=embeddings,
-        collection_name="confluence_docs"
+        collection_name="confluence_docs_v2"
     )
