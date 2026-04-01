@@ -86,9 +86,10 @@ async def webhook(request: Request):
             customer_data = jira_service.get_customer_by_detail_field("Teléfono de contacto", phone_for_search)
             if customer_data and customer_data.get("customers"):
                 customer = customer_data["customers"][0]
+                customer_id = customer.get("id", customer.get("id", "Unknown"))
                 customer_name = customer.get("displayName", customer.get("name", "Unknown"))
                 customer_email = customer.get("email", "No email")
-                customer_context = f"Nombre: {customer_name}, Email: {customer_email}"
+                customer_context = f"Nombre: {customer_name}, Email: {customer_email}, Id: {customer_id}"
                 print(f"Customer identificado via JSM: {customer_context}")
             else:
                 print(f"Customer no encontrado en JSM para el telefono {phone_for_search}.")
@@ -98,7 +99,18 @@ async def webhook(request: Request):
     resp = MessagingResponse()
     
     try:
-        resp.message(f"Hola {customer_context}")
+        if customer_context is None:
+            resp.message(
+                "¡Hola! 👋 Gracias por contactarte con *Sisorg*.\n\n"
+                "Lamentablemente, no encontramos tu número registrado en nuestra base de datos. "
+                "Por motivos de seguridad, *es necesario estar registrado para operar por este canal.*\n\n"
+                "Por favor, contacta a soporte o envíanos tu nombre y correo para procesar tu alta."
+            )
+        else:
+            resp.message(
+                f"¡Hola, {customer_name}! 👋 Bienvenido a *Sisorg*.\n\n"
+                "Es un gusto saludarte. ¿En qué podemos ayudarte el día de hoy?"
+            ) 
         # Call the RAG agent passing the customer context
         #agent_response = generate_response(query=message_body, customer_context=customer_context)
         #answer = agent_response["answer"]
