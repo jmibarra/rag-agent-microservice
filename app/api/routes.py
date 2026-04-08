@@ -13,7 +13,7 @@ class ChatRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     space_key: str
-    limit: int = 50
+    limit: int = 10
 
 @router.post("/chat", dependencies=[Depends(get_api_key)])
 async def chat(request: ChatRequest):
@@ -99,22 +99,22 @@ async def webhook(request: Request):
     resp = MessagingResponse()
     
     try:
-        if customer_context is None:
-            resp.message(
-                "¡Hola! 👋 Gracias por contactarte con *Sisorg*.\n\n"
-                "Lamentablemente, no encontramos tu número registrado en nuestra base de datos. "
-                "Por motivos de seguridad, *es necesario estar registrado para operar por este canal.*\n\n"
-                "Por favor, contacta a soporte o envíanos tu nombre y correo para procesar tu alta."
-            )
-        else:
-            resp.message(
-                f"¡Hola, {customer_name}! 👋 Bienvenido a *Sisorg*.\n\n"
-                "Es un gusto saludarte. ¿En qué podemos ayudarte el día de hoy?"
-            ) 
+        # if customer_context is None:
+        #     resp.message(
+        #         "¡Hola! 👋 Gracias por contactarte con *Sisorg*.\n\n"
+        #         "Lamentablemente, no encontramos tu número registrado en nuestra base de datos. "
+        #         "Por motivos de seguridad, *es necesario estar registrado para operar por este canal.*\n\n"
+        #         "Por favor, contacta a soporte o envíanos tu nombre y correo para procesar tu alta."
+        #     )
+        # else:
+        #     resp.message(
+        #         f"¡Hola, {customer_name}! 👋 Bienvenido a *Sisorg*.\n\n"
+        #         "Es un gusto saludarte. ¿En qué podemos ayudarte el día de hoy?"
+        #     ) 
         # Call the RAG agent passing the customer context
-        #agent_response = generate_response(query=message_body, customer_context=customer_context)
-        #answer = agent_response["answer"]
-        #resp.message(answer)
+        agent_response = generate_response(query=message_body, customer_context=customer_context)
+        answer = agent_response["answer"]
+        resp.message(answer)
     except Exception as e:
         print(f"Error generating response: {e}")
         resp.message("Lo siento, hubo un error procesando tu mensaje.")

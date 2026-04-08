@@ -26,10 +26,10 @@ def reset_and_ingest():
     # Let's use a standard default or ask.
     # Actually, the user's previous successful run likely used a specific key.
     # I'll default to 'AC' since that was in the logs of Step 175.
-    space_key_to_use = "AC" 
+    space_key_to_use = "IS" 
     
     try:
-        result = ingest_confluence(space_key=space_key_to_use, limit=50)
+        result = ingest_confluence(space_key=space_key_to_use, limit=10)
         print("\nIngestion Result:")
         print(result)
         print("\nSUCCESS: Data re-ingested with new embeddings.")

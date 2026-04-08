@@ -10,10 +10,15 @@ def ingest_confluence(space_key: str, limit: int = 50):
     loader = ConfluenceLoader(
         url=settings.CONFLUENCE_URL,
         username=settings.CONFLUENCE_USERNAME,
-        api_key=settings.CONFLUENCE_API_TOKEN
+        api_key=settings.CONFLUENCE_API_TOKEN,
+        space_key=space_key,
+        max_pages=limit,
+        include_attachments=False
     )
     # load pages
-    documents = loader.load(space_key=space_key, limit=limit, include_attachments=False)
+    documents = loader.load()
+
+    print(documents)
     
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     texts = text_splitter.split_documents(documents)

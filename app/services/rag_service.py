@@ -66,12 +66,12 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
 
     # 2. Creo el prompt de respuesta a la pregunta
     system_prompt = (
-        "You are an assistant for passing questions about the company's internal documentation. "
-        "Use the following pieces of retrieved context to answer the question at the end. "
+        "You are an assistant for answering user questions about the company's internal documentation and their support tickets. "
+        "Use the retrieved context below, as well as any System Notices or User Context included in the user's prompt, to answer the question. "
         "If you don't know the answer, just say that you don't know, don't try to make up an answer. "
         "IMPORTANT: You must ALWAYs answer in Spanish, regardless of the input language."
         "\n\n"
-        "{context}"
+        "Retrieved Context:\n{context}"
     )
     
     qa_prompt = ChatPromptTemplate.from_messages(
@@ -96,14 +96,20 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
     keys = re.findall(r'\b[A-Z]{2,}-\d+\b', query)
     if keys:
         jira_infos = []
-        for key in keys:
-            info = jira_service.get_issue_details(key)
-            print(f" [DEBUG JIRA] Key: {key} | Result: {info}")
-            if info:
-                jira_infos.append(info)
-            else:
-                # Le informo al modelo que el ticket no se encontró para que elabore la respuesta.
-                jira_infos.append(f"Jira Ticket {key}: Information NOT found. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS').")
+        print(f" [DEBUG JIRA] Customer context: {customer_context}")
+        
+        if customer_context:
+            for key in keys:
+                info = jira_service.get_issue_details(key)
+                print(f" [DEBUG JIRA] Key: {key} | Result: {info}")
+                if info:
+                    jira_infos.append(info)
+                else:
+                    print("Esta entrando en el else")
+                    # Le informo al modelo que el ticket no se encontró para que elabore la respuesta.
+                    jira_infos.append(f"Jira Ticket {key}: Information NOT found. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS').")
+        else:
+            jira_infos.append("Jira Ticket: No customer context provided. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS').")
         
         if jira_infos:
             jira_context = "\n\n[INFORMACIÓN EN TIEMPO REAL / SYSTEM NOTICES]:\n" + "\n---\n".join(jira_infos)
@@ -120,7 +126,9 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
     
     if customer_context:
         full_input += f"\n\n[CONTEXTO DEL USUARIO]: El mensaje proviene del cliente verificado: {customer_context}. " \
-                      "Puedes dirigirte a este cliente por su nombre de manera cordial."
+                      "Puedes dirigirte a este cliente por su nombre de manera cordial e informarle sobre sus tickets."
+    else:
+        full_input += "\n\n[CONTEXTO DEL USUARIO]: Usuario anónimo / No registrado. No tiene acceso a información personal ni a detalles de tickets que requieran cuenta verificada."
 
 
     result = rag_chain.invoke({
