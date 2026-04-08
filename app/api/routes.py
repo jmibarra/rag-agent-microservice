@@ -83,13 +83,13 @@ async def webhook(request: Request):
             if len(phone_for_search) > 10 and phone_for_search.startswith("549"):
                 phone_for_search = phone_for_search[3:] # corta el 549
             
-            customer_data = jira_service.get_customer_by_detail_field("Teléfono de contacto", phone_for_search)
+            customer_data = jira_service.get_customer_by_detail_field("Teléfono asociado", phone_for_search)
             if customer_data and customer_data.get("customers"):
                 customer = customer_data["customers"][0]
                 customer_id = customer.get("id", customer.get("id", "Unknown"))
                 customer_name = customer.get("displayName", customer.get("name", "Unknown"))
                 customer_email = customer.get("email", "No email")
-                customer_context = f"Nombre: {customer_name}, Email: {customer_email}, Id: {customer_id}"
+                customer_context = f"Nombre: {customer_name}, Email: {customer_email}, Customer id: {customer_id}"
                 print(f"Customer identificado via JSM: {customer_context}")
             else:
                 print(f"Customer no encontrado en JSM para el telefono {phone_for_search}.")

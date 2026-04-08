@@ -8,7 +8,7 @@ from app.services.jira_service import jira_service
 
 def test_get_customer_by_phone():
     telefono_prueba = "1156570822"  # Puedes reemplazarlo por el valor real a buscar
-    campo_busqueda = "Teléfono de contacto"
+    campo_busqueda = "Teléfono asociado"
 
     print(f"=== Probando obtener cliente de Jira Service Management ===")
     print(f"Campo: '{campo_busqueda}' | Valor: '{telefono_prueba}'\n")
