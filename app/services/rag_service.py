@@ -82,7 +82,7 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
             jira_context = "\n\n[SYSTEM NOTICE: Info about mentioned Jira tickets]:\n" + "\n---\n".join(jira_infos)
     
     full_input = query + jira_context
-    
+
     if customer_context:
         full_input += f"\n\n[USER CONTEXT]: The following is data about the user: {customer_context}. " \
                       "Extract the 'Id' field and use it as 'customer_id' if you need to create a ticket."
