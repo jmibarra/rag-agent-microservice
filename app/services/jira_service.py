@@ -285,7 +285,7 @@ class JiraService:
             "requestFieldValues": {
                 "summary": summary,
                 "description": description,
-                "customfield_10066": {"id": producto_id}
+                "customfield_10066": [{"id": producto_id}]
             }
         }
         
