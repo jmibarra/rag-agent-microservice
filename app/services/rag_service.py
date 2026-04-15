@@ -21,13 +21,29 @@ def _format_chat_history(history: list) -> list:
     return messages
 
 @tool
-def create_jira_ticket(summary: str, description: str, customer_id: str = None) -> str:
+def create_jira_ticket(summary: str, description: str, producto_id: str, customer_id: str = None) -> str:
     """
     Creates a Jira Service Management ticket. 
     Use this tool when the user asks to create a ticket or when you cannot answer their question with the knowledge base.
     You MUST extract the 'customer_id' from the USER_CONTEXT if it was provided, and pass it here.
+    
+    'producto_id' is REQUIRED and MUST be one of the following numeric IDs based on what product the user reports:
+    10026: Agilis - AMS
+    10024: Agilis - Fics
+    10031: Agilis - FRM
+    10346: Agilis - Lean
+    10025: Agilis - PXP
+    10028: App - Frixo
+    10027: App - Hefesto
+    10029: App - Jano
+    10030: App - Prometeus
+    10032: B2C - Carro de compras
+    10033: Reportes
+    10034: Otro
+    
+    CRITICAL: If the user hasn't specified which product they are using, do NOT guess and do NOT use 'Otro' by default. Instead, ASK the user which product from the list they are having an issue with.
     """
-    return jira_service.create_customer_request(summary, description, customer_id)
+    return jira_service.create_customer_request(summary, description, producto_id, customer_id)
 
 def generate_response(query: str, chat_history: list = None, customer_context: str = None):
     # Inicializo el LLM y el vector store

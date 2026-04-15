@@ -266,7 +266,7 @@ class JiraService:
                 print(f"Response details: {e.response.text}")
             return None
 
-    def create_customer_request(self, summary: str, description: str, customer_id: str = None) -> str:
+    def create_customer_request(self, summary: str, description: str, producto_id: str, customer_id: str = None) -> str:
         """
         Creates a customer request in the 'SOP' project (ServiceDeskId=2) with RequestType 'Consultas' (RequestTypeId=26).
         """
@@ -284,7 +284,8 @@ class JiraService:
             "requestTypeId": "26",
             "requestFieldValues": {
                 "summary": summary,
-                "description": description
+                "description": description,
+                "customfield_10066": {"id": producto_id}
             }
         }
         
