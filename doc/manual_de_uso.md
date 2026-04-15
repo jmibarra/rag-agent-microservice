@@ -69,17 +69,29 @@ _(Nota: Reemplaza `"DS"` con la Key del espacio de Confluence real que quieras i
 
 ### B. Chat (Query)
 
-Este endpoint recibe una pregunta, busca contexto en la base de datos y genera una respuesta con el LLM.
+Este endpoint recibe una pregunta, busca contexto en la base de datos y genera una respuesta con el LLM. Además, gracias a las herramientas (tools), el agente puede generar un ticket de soporte de ser solicitado.
 
 - **Endpoint**: `POST /api/v1/chat`
 - **Header**: `X-API-KEY`
 
+**Ejemplo de consulta normal:**
 ```bash
 curl -X POST http://localhost:8000/api/v1/chat \
   -H "X-API-KEY: Z9gAWAb61kBapfmuHUvbZM4wmoZJLxkhWWyhUKZMeiM" \
   -H "Content-Type: application/json" \
   -d '{
     "message": "¿Cómo configuro mi correo electrónico?",
+    "history": []
+  }'
+```
+
+**Ejemplo solicitando creación de ticket:**
+```bash
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "X-API-KEY: Z9gAWAb61kBapfmuHUvbZM4wmoZJLxkhWWyhUKZMeiM" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Mi computadora no enciende. Por favor, crea un ticket para el área de soporte con urgencia.",
     "history": []
   }'
 ```

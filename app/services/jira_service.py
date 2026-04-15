@@ -85,4 +85,47 @@ class JiraService:
                 print(f"Response details: {e.response.text}")
             return None
 
+    def create_customer_request(self, summary: str, description: str, customer_id: str = None) -> str:
+        """
+        Creates a customer request in the 'SOP' project (ServiceDeskId=2) with RequestType 'Consultas' (RequestTypeId=26).
+        """
+        if not settings.JIRA_URL or not settings.JIRA_USERNAME or not settings.JIRA_API_TOKEN:
+            return "Error: Jira credentials are not configured."
+
+        url = f"{settings.JIRA_URL}/rest/servicedeskapi/request"
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "serviceDeskId": "2",
+            "requestTypeId": "26",
+            "requestFieldValues": {
+                "summary": summary,
+                "description": description
+            }
+        }
+        
+        if customer_id:
+            payload["raiseOnBehalfOf"] = customer_id
+            
+        try:
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                auth=(settings.JIRA_USERNAME, settings.JIRA_API_TOKEN)
+            )
+            response.raise_for_status()
+            data = response.json()
+            issue_key = data.get("issueKey", "Unknown Key")
+            return f"Ticket creado exitosamente: {issue_key}"
+        except requests.exceptions.RequestException as e:
+            error_msg = str(e)
+            if hasattr(e, 'response') and e.response is not None:
+                error_msg += f". Response details: {e.response.text}"
+            print(f"Error creating customer request: {error_msg}")
+            return f"Error al crear el ticket en Jira: {error_msg}"
+
 jira_service = JiraService()

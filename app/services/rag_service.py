@@ -1,9 +1,13 @@
-from langchain.chains import create_retrieval_chain, create_history_aware_retriever
-from langchain.chains.combine_documents import create_stuff_documents_chain
+import re
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.tools.retriever import create_retriever_tool
+from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
+
 from app.services.llm_factory import LLMFactory
 from app.services.vector_store import get_vector_store
+from app.services.jira_service import jira_service
 
 def _format_chat_history(history: list) -> list:
     if not history:
@@ -16,83 +20,53 @@ def _format_chat_history(history: list) -> list:
             messages.append(AIMessage(content=msg.get("content", "")))
     return messages
 
+@tool
+def create_jira_ticket(summary: str, description: str, customer_id: str = None) -> str:
+    """
+    Creates a Jira Service Management ticket. 
+    Use this tool when the user asks to create a ticket or when you cannot answer their question with the knowledge base.
+    You MUST extract the 'customer_id' from the USER_CONTEXT if it was provided, and pass it here.
+    """
+    return jira_service.create_customer_request(summary, description, customer_id)
+
 def generate_response(query: str, chat_history: list = None, customer_context: str = None):
     # Inicializo el LLM y el vector store
     llm = LLMFactory.create_llm()
     vector_store = get_vector_store()
     retriever = vector_store.as_retriever(search_kwargs={"k": 4})
 
-    # Preparo el historial del chat
+    # Tool de busqueda en Docs
+    retriever_tool = create_retriever_tool(
+        retriever,
+        "search_internal_docs",
+        "Search internal documentation to answer user queries. Always use this first before creating a ticket unless explicitly asked to create a ticket."
+    )
+
+    tools = [retriever_tool, create_jira_ticket]
+
+    system_prompt = (
+        "You are an assistant for answering questions based on the company's internal documentation.\n"
+        "1. First, try to answer the question using the `search_internal_docs` tool.\n"
+        "2. If you cannot find the answer, or if the user EXPLICITLY asks to raise a ticket, "
+        "use the `create_jira_ticket` tool.\n"
+        "3. If you create a ticket, summarize what you did for the user.\n"
+        "IMPORTANT: You must ALWAYS answer in Spanish, regardless of the input language.\n"
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
+
+    agent = create_tool_calling_agent(llm, tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, return_intermediate_steps=True)
+
     formatted_history = _format_chat_history(chat_history or [])
 
-    # 1. Contextualizo la pregunta y agrego la historia al retriever
-    # Esta cadena maneja la reformulación de la pregunta si hay historia
-    if formatted_history:
-        contextualize_q_system_prompt = (
-            "Given a chat history and the latest user question "
-            "which might reference context in the chat history, "
-            "formulate a standalone question which can be understood "
-            "without the chat history. Do NOT answer the question, "
-            "just reformulate it if needed and otherwise return it as is."
-        )
-        contextualize_q_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", contextualize_q_system_prompt),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}"),
-            ]
-        )
-        history_aware_retriever = create_history_aware_retriever(
-            llm, retriever, contextualize_q_prompt
-        )
-    else:
-        contextualize_q_system_prompt = (
-            "Given a chat history and the latest user question "
-            "which might reference context in the chat history, "
-            "formulate a standalone question which can be understood "
-            "without the chat history. Do NOT answer the question, "
-            "just reformulate it if needed and otherwise return it as is."
-        )
-        contextualize_q_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", contextualize_q_system_prompt),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}"),
-            ]
-        )
-        history_aware_retriever = create_history_aware_retriever(
-            llm, retriever, contextualize_q_prompt
-        )
-
-    # 2. Creo el prompt de respuesta a la pregunta
-    system_prompt = (
-        "You are an assistant for passing questions about the company's internal documentation. "
-        "Use the following pieces of retrieved context to answer the question at the end. "
-        "If you don't know the answer, just say that you don't know, don't try to make up an answer. "
-        "IMPORTANT: You must ALWAYs answer in Spanish, regardless of the input language."
-        "\n\n"
-        "{context}"
-    )
-    
-    qa_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
-    )
-
-    # Creo el RAG chain
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-    
     # -- JIRA INTEGRATION --
-    import re
-    from app.services.jira_service import jira_service
-
-    # Detectar keys tipo PROJECT-123
     jira_context = ""
-    # Busca patrones de 2+ mayúsculas, guión y dígitos
     keys = re.findall(r'\b[A-Z]{2,}-\d+\b', query)
     if keys:
         jira_infos = []
@@ -102,33 +76,29 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
             if info:
                 jira_infos.append(info)
             else:
-                # Le informo al modelo que el ticket no se encontró para que elabore la respuesta.
-                jira_infos.append(f"Jira Ticket {key}: Information NOT found. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS').")
+                jira_infos.append(f"Jira Ticket {key}: Information NOT found.")
         
         if jira_infos:
-            jira_context = "\n\n[INFORMACIÓN EN TIEMPO REAL / SYSTEM NOTICES]:\n" + "\n---\n".join(jira_infos)
-    
-    # Inyectamos el contexto de Jira en la query o como variable extra.
-    # Dado que create_retrieval_chain espera 'input', podemos enriquecer el input
-    # pero eso afectaría al retriever (buscaría cosas de Jira en Confluence).
-    # Estrategia: Modificar el input SOLO para la generation, pero el retriever usa el input original.
-    # Sin embargo, el create_retrieval_chain orquesta todo.
-    # Mejor estrategia simple: Append al input. El retriever buscará sobre los tickets también (lo cual no es malo,
-    # puede hallar docs relacionados) y el LLM tendrá la info explícita al final.
+            jira_context = "\n\n[SYSTEM NOTICE: Info about mentioned Jira tickets]:\n" + "\n---\n".join(jira_infos)
     
     full_input = query + jira_context
     
     if customer_context:
-        full_input += f"\n\n[CONTEXTO DEL USUARIO]: El mensaje proviene del cliente verificado: {customer_context}. " \
-                      "Puedes dirigirte a este cliente por su nombre de manera cordial."
+        full_input += f"\n\n[USER CONTEXT]: The following is data about the user: {customer_context}. " \
+                      "Extract the 'Id' field and use it as 'customer_id' if you need to create a ticket."
 
-
-    result = rag_chain.invoke({
+    result = agent_executor.invoke({
         "input": full_input,
         "chat_history": formatted_history
     })
     
+    context_used = []
+    if "intermediate_steps" in result:
+        for action, tool_output in result["intermediate_steps"]:
+            if action.tool == "search_internal_docs":
+                context_used.append(str(tool_output)[:200] + "...")
+                
     return {
-        "answer": result["answer"],
-        "context_used": [doc.page_content[:200] + "..." for doc in result["context"]]
+        "answer": result.get("output", ""),
+        "context_used": context_used
     }
