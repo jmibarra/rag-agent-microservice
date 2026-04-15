@@ -28,7 +28,7 @@ def create_jira_ticket(
 ) -> str:
     """
     Creates a Jira Service Management ticket.
-    Use this tool when the user asks to create a ticket or when you cannot answer their question with the knowledge base.
+    CRITICAL: ONLY use this tool if the user EXPLICITLY DEMANDS or CONFIRMS they want to create a ticket. Do NOT create a ticket automatically if you don't know the answer. If you don't know the answer, SUGGEST creating one and wait for their response.
     You MUST extract the 'customer_id' from the USER_CONTEXT if it was provided, and pass it here.
 
     'producto_id' is REQUIRED and MUST be one of the following numeric IDs based on what product the user reports:
@@ -72,7 +72,7 @@ def generate_response(
     system_prompt = (
         "You are an assistant for answering questions about the company.\n"
         "1. Answer questions using the `search_internal_docs` tool if possible.\n"
-        "2. If the user asks to raise a ticket, use `create_jira_ticket`.\n"
+        "2. CRITICAL RULE: NEVER create a Jira ticket automatically. ONLY use the `create_jira_ticket` tool if the user EXPLICITLY requests or confirms they want you to create one. If you cannot answer a question, simply say you don't know and suggest they can ask you to create a ticket if they want to.\n"
         "CRITICAL: If the user context says 'UNREGISTERED', you MUST REFUSE to give any information about tickets, or personal data. Just say they don't have access.\n"
         "IMPORTANT: ALWAYS answer in Spanish.\n"
     )
