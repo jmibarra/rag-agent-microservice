@@ -9,6 +9,7 @@ from app.services.llm_factory import LLMFactory
 from app.services.vector_store import get_vector_store
 from app.services.jira_service import jira_service
 
+
 def _format_chat_history(history: list) -> list:
     if not history:
         return []
@@ -20,13 +21,16 @@ def _format_chat_history(history: list) -> list:
             messages.append(AIMessage(content=msg.get("content", "")))
     return messages
 
+
 @tool
-def create_jira_ticket(summary: str, description: str, producto_id: str, customer_id: str = None) -> str:
+def create_jira_ticket(
+    summary: str, description: str, producto_id: str, customer_id: str = None
+) -> str:
     """
-    Creates a Jira Service Management ticket. 
+    Creates a Jira Service Management ticket.
     Use this tool when the user asks to create a ticket or when you cannot answer their question with the knowledge base.
     You MUST extract the 'customer_id' from the USER_CONTEXT if it was provided, and pass it here.
-    
+
     'producto_id' is REQUIRED and MUST be one of the following numeric IDs based on what product the user reports:
     10026: Agilis - AMS
     10024: Agilis - Fics
@@ -40,12 +44,17 @@ def create_jira_ticket(summary: str, description: str, producto_id: str, custome
     10032: B2C - Carro de compras
     10033: Reportes
     10034: Otro
-    
+
     CRITICAL: If the user hasn't specified which product they are using, do NOT guess and do NOT use 'Otro' by default. Instead, ASK the user which product from the list they are having an issue with.
     """
-    return jira_service.create_customer_request(summary, description, producto_id, customer_id)
+    return jira_service.create_customer_request(
+        summary, description, producto_id, customer_id
+    )
 
-def generate_response(query: str, chat_history: list = None, customer_context: str = None):
+
+def generate_response(
+    query: str, chat_history: list = None, customer_context: str = None
+):
     # Inicializo el LLM y el vector store
     llm = LLMFactory.create_llm()
     vector_store = get_vector_store()
@@ -55,66 +64,81 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
     retriever_tool = create_retriever_tool(
         retriever,
         "search_internal_docs",
-        "Search internal documentation to answer user queries. Always use this first before creating a ticket unless explicitly asked to create a ticket."
+        "Search internal documentation to answer user queries. Always use this first before creating a ticket unless explicitly asked to create a ticket.",
     )
 
     tools = [retriever_tool, create_jira_ticket]
 
     system_prompt = (
-        "You are an assistant for answering questions based on the company's internal documentation.\n"
-        "1. First, try to answer the question using the `search_internal_docs` tool.\n"
-        "2. If you cannot find the answer, or if the user EXPLICITLY asks to raise a ticket, "
-        "use the `create_jira_ticket` tool.\n"
-        "3. If you create a ticket, summarize what you did for the user.\n"
-        "IMPORTANT: You must ALWAYS answer in Spanish, regardless of the input language.\n"
+        "You are an assistant for answering questions about the company.\n"
+        "1. Answer questions using the `search_internal_docs` tool if possible.\n"
+        "2. If the user asks to raise a ticket, use `create_jira_ticket`.\n"
+        "CRITICAL: If the user context says 'UNREGISTERED', you MUST REFUSE to give any information about tickets, or personal data. Just say they don't have access.\n"
+        "IMPORTANT: ALWAYS answer in Spanish.\n"
     )
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ]
+    )
 
     agent = create_tool_calling_agent(llm, tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, return_intermediate_steps=True)
+    agent_executor = AgentExecutor(
+        agent=agent, tools=tools, verbose=True, return_intermediate_steps=True
+    )
 
     formatted_history = _format_chat_history(chat_history or [])
 
     # -- JIRA INTEGRATION --
     jira_context = ""
-    keys = re.findall(r'\b[A-Z]{2,}-\d+\b', query)
+    keys = re.findall(r"\b[A-Z]{2,}-\d+\b", query)
     if keys:
         jira_infos = []
-        for key in keys:
-            info = jira_service.get_issue_details(key)
-            print(f" [DEBUG JIRA] Key: {key} | Result: {info}")
-            if info:
-                jira_infos.append(info)
-            else:
-                jira_infos.append(f"Jira Ticket {key}: Information NOT found.")
-        
+        if customer_context:
+            for key in keys:
+                info = jira_service.get_issue_details(key)
+                print(f" [DEBUG JIRA] Key: {key} | Result: {info}")
+                if info:
+                    jira_infos.append(info)
+                else:
+                    jira_infos.append(f"Jira Ticket {key}: Information NOT found.")
+        else:
+            jira_infos.append(
+                "Jira Ticket: No info available. User is UNREGISTERED. Tell them they don't have access."
+            )
+
         if jira_infos:
-            jira_context = "\n\n[SYSTEM NOTICE: Info about mentioned Jira tickets]:\n" + "\n---\n".join(jira_infos)
-    
+            jira_context = (
+                "\n\n[SYSTEM NOTICE: Info about mentioned Jira tickets]:\n"
+                + "\n---\n".join(jira_infos)
+            )
+
     full_input = query + jira_context
 
+    print(customer_context)
     if customer_context:
-        full_input += f"\n\n[USER CONTEXT]: The following is data about the user: {customer_context}. " \
-                      "Extract the 'Id' field and use it as 'customer_id' if you need to create a ticket."
+        full_input += (
+            f"\n\n[USER CONTEXT]: The following is data about the user: {customer_context}. "
+            "Extract the 'Id' field and use it as 'customer_id' if you need to create a ticket."
+        )
+    else:
+        full_input += "\n\n[USER CONTEXT]: UNREGISTERED. You do NOT have permission to provide any information about tickets or accounts. RESPOND EXACTLY: 'Lo siento, no tienes acceso a esa información ya que tu número no está registrado en nuestro sistema.'"
 
-    result = agent_executor.invoke({
-        "input": full_input,
-        "chat_history": formatted_history
-    })
-    
+    print("BEFORE ANSWER")
+    print(full_input)
+
+    result = agent_executor.invoke(
+        {"input": full_input, "chat_history": formatted_history}
+    )
+
     context_used = []
     if "intermediate_steps" in result:
         for action, tool_output in result["intermediate_steps"]:
             if action.tool == "search_internal_docs":
                 context_used.append(str(tool_output)[:200] + "...")
-                
-    return {
-        "answer": result.get("output", ""),
-        "context_used": context_used
-    }
+
+    return {"answer": result.get("output", ""), "context_used": context_used}
