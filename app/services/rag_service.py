@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from app.services.llm_factory import LLMFactory
 from app.services.vector_store import get_vector_store
 
+
 def _format_chat_history(history: list) -> list:
     if not history:
         return []
@@ -16,7 +17,10 @@ def _format_chat_history(history: list) -> list:
             messages.append(AIMessage(content=msg.get("content", "")))
     return messages
 
-def generate_response(query: str, chat_history: list = None, customer_context: str = None):
+
+def generate_response(
+    query: str, chat_history: list = None, customer_context: dict = None
+):
     # Inicializo el LLM y el vector store
     llm = LLMFactory.create_llm()
     vector_store = get_vector_store()
@@ -73,7 +77,7 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
         "\n\n"
         "Retrieved Context:\n{context}"
     )
-    
+
     qa_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt),
@@ -85,7 +89,7 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
     # Creo el RAG chain
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-    
+
     # -- JIRA INTEGRATION --
     import re
     from app.services.jira_service import jira_service
@@ -93,11 +97,11 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
     # Detectar keys tipo PROJECT-123
     jira_context = ""
     # Busca patrones de 2+ mayúsculas, guión y dígitos
-    keys = re.findall(r'\b[A-Z]{2,}-\d+\b', query)
+    keys = re.findall(r"\b[A-Z]{2,}-\d+\b", query)
     if keys:
         jira_infos = []
         print(f" [DEBUG JIRA] Customer context: {customer_context}")
-        
+
         if customer_context:
             for key in keys:
                 info = jira_service.get_issue_details(key)
@@ -107,13 +111,20 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
                 else:
                     print("Esta entrando en el else")
                     # Le informo al modelo que el ticket no se encontró para que elabore la respuesta.
-                    jira_infos.append(f"Jira Ticket {key}: Information NOT found. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS').")
+                    jira_infos.append(
+                        f"Jira Ticket {key}: Information NOT found. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS')."
+                    )
         else:
-            jira_infos.append("Jira Ticket: No customer context provided. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS').")
-        
+            jira_infos.append(
+                "Jira Ticket: No customer context provided. The ticket might not exist, or access is restricted (check 'JIRA_ALLOWED_PROJECTS')."
+            )
+
         if jira_infos:
-            jira_context = "\n\n[INFORMACIÓN EN TIEMPO REAL / SYSTEM NOTICES]:\n" + "\n---\n".join(jira_infos)
-    
+            jira_context = (
+                "\n\n[INFORMACIÓN EN TIEMPO REAL / SYSTEM NOTICES]:\n"
+                + "\n---\n".join(jira_infos)
+            )
+
     # Inyectamos el contexto de Jira en la query o como variable extra.
     # Dado que create_retrieval_chain espera 'input', podemos enriquecer el input
     # pero eso afectaría al retriever (buscaría cosas de Jira en Confluence).
@@ -121,22 +132,20 @@ def generate_response(query: str, chat_history: list = None, customer_context: s
     # Sin embargo, el create_retrieval_chain orquesta todo.
     # Mejor estrategia simple: Append al input. El retriever buscará sobre los tickets también (lo cual no es malo,
     # puede hallar docs relacionados) y el LLM tendrá la info explícita al final.
-    
+
     full_input = query + jira_context
-    
+
     if customer_context:
-        full_input += f"\n\n[CONTEXTO DEL USUARIO]: El mensaje proviene del cliente verificado: {customer_context}. " \
-                      "Puedes dirigirte a este cliente por su nombre de manera cordial e informarle sobre sus tickets."
+        full_input += (
+            f"\n\n[CONTEXTO DEL USUARIO]: El mensaje proviene del cliente verificado: {customer_context}. "
+            "Puedes dirigirte a este cliente por su nombre de manera cordial e informarle sobre sus tickets."
+        )
     else:
         full_input += "\n\n[CONTEXTO DEL USUARIO]: Usuario anónimo / No registrado. No tiene acceso a información personal ni a detalles de tickets que requieran cuenta verificada."
 
+    result = rag_chain.invoke({"input": full_input, "chat_history": formatted_history})
 
-    result = rag_chain.invoke({
-        "input": full_input,
-        "chat_history": formatted_history
-    })
-    
     return {
         "answer": result["answer"],
-        "context_used": [doc.page_content[:200] + "..." for doc in result["context"]]
+        "context_used": [doc.page_content[:200] + "..." for doc in result["context"]],
     }
