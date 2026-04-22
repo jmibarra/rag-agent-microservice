@@ -4,6 +4,7 @@ from typing import List, Optional
 from app.services.rag_service import generate_response
 from app.services.ingestion import ingest_confluence
 from app.core.security import get_api_key
+from app.services.session_service import session_manager
 
 router = APIRouter()
 
@@ -78,23 +79,26 @@ async def webhook(request: Request):
     phone_for_search = (
         sender_id.replace("whatsapp:", "").replace("+", "") if sender_id else ""
     )
-    # Se añade un intento alternativo asumiendo 549 para argentina si es necesario,
-    # pero usamos el limpio por defecto.
+    print(f" [DEBUG WEBHOOK] Phone from Twilio: {sender_id} -> Cleaned: {phone_for_search}")
 
     from app.services.jira_service import jira_service
 
     customer_context = None
     if phone_for_search:
-        # Intenta buscar por el field "Teléfono de contacto"
         try:
-            # Primero buscamos limpiando TODO menos los ultimos 10 digitos asumiendo codigo de area (Opcional, pero Twilio lo manda con +549)
-            # Para coincidir con "1156570822", extraemos si es muy largo
-            if len(phone_for_search) > 10 and phone_for_search.startswith("549"):
-                phone_for_search = phone_for_search[3:]  # corta el 549
+            search_term = phone_for_search
+            # Intento de normalización: si empieza con 549 y es largo, probamos también sin el 549
+            if len(search_term) > 10 and search_term.startswith("549"):
+                search_term_trimmed = search_term[3:]
+                print(f" [DEBUG WEBHOOK] Trying search with trimmed number: {search_term_trimmed}")
+                customer_data = jira_service.get_customer_by_detail_field(
+                    "Teléfono asociado", search_term_trimmed
+                )
+            else:
+                customer_data = jira_service.get_customer_by_detail_field(
+                    "Teléfono asociado", search_term
+                )
 
-            customer_data = jira_service.get_customer_by_detail_field(
-                "Teléfono asociado", phone_for_search
-            )
             if customer_data and customer_data.get("customers"):
                 customer = customer_data["customers"][0]
                 customer_id = customer.get("id", customer.get("id", "Unknown"))
@@ -102,19 +106,16 @@ async def webhook(request: Request):
                     "displayName", customer.get("name", "Unknown")
                 )
                 customer_email = customer.get("email", "No email")
-                customer_context_str = f"Nombre: {customer_name}, Email: {customer_email}, Customer id: {customer_id}"
                 customer_context = {
                     "id": customer_id,
                     "name": customer_name,
                     "email": customer_email,
                 }
-                print(f"Customer identificado via JSM: {customer_context}")
+                print(f" [DEBUG WEBHOOK] Customer ENCONTRADO: {customer_context}")
             else:
-                print(
-                    f"Customer no encontrado en JSM para el telefono {phone_for_search}."
-                )
+                print(f" [DEBUG WEBHOOK] Customer NO encontrado en JSM para el término: {search_term}")
         except Exception as e:
-            print(f"Error buscando al customer en JSM: {e}")
+            print(f" [DEBUG WEBHOOK] Error buscando al customer en JSM: {e}")
 
     resp = MessagingResponse()
 
@@ -131,12 +132,22 @@ async def webhook(request: Request):
         #         f"¡Hola, {customer_name}! 👋 Bienvenido a *Sisorg*.\n\n"
         #         "Es un gusto saludarte. ¿En qué podemos ayudarte el día de hoy?"
         #     )
-        # Call the RAG agent passing the customer context
+        # Get existing history for this sender
+        history = session_manager.get_history(sender_id)
+
+        # Call the RAG agent passing the customer context and history
         agent_response = generate_response(
-            query=message_body, customer_context=customer_context
+            query=message_body, 
+            chat_history=history,
+            customer_context=customer_context
         )
         answer = agent_response["answer"]
         print(f"Respuesta del agente: {answer}")
+
+        # Save to history
+        session_manager.add_message(sender_id, "user", message_body)
+        session_manager.add_message(sender_id, "assistant", answer)
+
         resp.message(answer)
     except Exception as e:
         print(f"Error generating response: {e}")

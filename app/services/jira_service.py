@@ -38,18 +38,21 @@ class JiraService:
                 f"issue: {issue_key}, reporter: {customer_context.get('email')}, request_participants: {customer.get('id')}, organizations: {organizations}"
             )
 
-            if len(organizations) == 0:
-                return None
+            organizations = customer.get("organizations", [])
 
-            organization = organizations[0]
+            print(
+                f"issue: {issue_key}, reporter: {customer_context.get('email')}, request_participants: {customer.get('id')}, organizations: {organizations}"
+            )
 
-            print(organization)
+            organization = organizations[0] if len(organizations) > 0 else None
+
+            reporter = customer.get("name")
 
             issue = self.get_issue_details_by_reporter_or_rp_or_organization(
                 issue_key=issue_key,
-                reporter=customer.get("email"),
+                reporter=reporter,
                 request_participants=customer.get("id"),
-                organization=organization.get("name"),
+                organization=organization.get("name") if organization else None,
             )
 
             if issue is None:
@@ -78,7 +81,7 @@ class JiraService:
         issue_key: str,
         reporter: str,
         request_participants: str,
-        organization: str,
+        organization: str = None,
     ) -> str | None:
         if not self.jira:
             return None
@@ -88,7 +91,17 @@ class JiraService:
             return None
 
         try:
-            jql_str = f'key = "{issue_key}" AND (reporter = "{reporter}" OR "Request participants" = "{request_participants}" OR organization = "{organization}")'
+            jql_parts = [
+                f'reporter = "{reporter}"',
+                f'"Request participants" = "{request_participants}"',
+            ]
+            if organization:
+                jql_parts.append(f'organization = "{organization}"')
+
+            or_parts = " OR ".join(jql_parts)
+            jql_str = f'key = "{issue_key}" AND ({or_parts})'
+
+            print(f"JQL {jql_str}")
 
             url = f"{settings.JIRA_URL.rstrip('/')}/rest/api/3/search/jql"
             params = {
@@ -266,48 +279,102 @@ class JiraService:
                 print(f"Response details: {e.response.text}")
             return None
 
-    def create_customer_request(self, summary: str, description: str, producto_id: str, customer_id: str = None) -> str:
+    def get_incident_fields_meta(self) -> dict:
         """
-        Creates a customer request in the 'SOP' project (ServiceDeskId=2) with RequestType 'Consultas' (RequestTypeId=26).
+        Fetches options for Producto (10066), Proceso (10069), and Impacto (10070)
+        dynamically from Jira.
         """
-        if not settings.JIRA_URL or not settings.JIRA_USERNAME or not settings.JIRA_API_TOKEN:
-            return "Error: Jira credentials are not configured."
+        if not self.jira or not settings.JIRA_URL:
+            return {}
 
-        url = f"{settings.JIRA_URL}/rest/servicedeskapi/request"
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json"
+        url = f"{settings.JIRA_URL.rstrip('/')}/rest/api/2/issue/createmeta"
+        params = {
+            "projectKeys": "SOP",
+            "issuetypeNames": "Incident",
+            "expand": "projects.issuetypes.fields",
         }
-        
-        payload = {
-            "serviceDeskId": "2",
-            "requestTypeId": "26",
-            "requestFieldValues": {
-                "summary": summary,
-                "description": description,
-                "customfield_10066": [{"id": producto_id}]
-            }
-        }
-        
-        if customer_id:
-            payload["raiseOnBehalfOf"] = customer_id
-            
+        headers = {"Accept": "application/json"}
+
         try:
-            response = requests.post(
+            response = requests.get(
                 url,
+                params=params,
                 headers=headers,
-                json=payload,
-                auth=(settings.JIRA_USERNAME, settings.JIRA_API_TOKEN)
+                auth=HTTPBasicAuth(settings.JIRA_USERNAME, settings.JIRA_API_TOKEN),
+                timeout=10,
             )
             response.raise_for_status()
             data = response.json()
-            issue_key = data.get("issueKey", "Unknown Key")
-            return f"Ticket creado exitosamente: {issue_key}"
-        except requests.exceptions.RequestException as e:
-            error_msg = str(e)
-            if hasattr(e, 'response') and e.response is not None:
-                error_msg += f". Response details: {e.response.text}"
-            print(f"Error creating customer request: {error_msg}")
-            return f"Error al crear el ticket en Jira: {error_msg}"
+
+            projects = data.get("projects", [])
+            if not projects:
+                return {}
+
+            fields = projects[0].get("issuetypes", [{}])[0].get("fields", {})
+
+            def extract_options(field_id):
+                field_data = fields.get(field_id, {})
+                return [
+                    {"id": opt["id"], "value": opt["value"]}
+                    for opt in field_data.get("allowedValues", [])
+                ]
+
+            return {
+                "producto": extract_options("customfield_10066"),
+                "proceso": extract_options("customfield_10069"),
+                "impacto": extract_options("customfield_10070"),
+            }
+        except Exception as e:
+            print(f"Error fetching creation meta: {e}")
+            return {}
+
+    def create_customer_request(self, payload: dict) -> str:
+        """
+        PRIMITIVE: Executes a POST request to JSM ServiceDesk API.
+        Receives a pre-constructed payload and handles error states.
+        """
+        if (
+            not settings.JIRA_URL
+            or not settings.JIRA_USERNAME
+            or not settings.JIRA_API_TOKEN
+        ):
+            return "Error: Jira credentials are not configured."
+
+        url = f"{settings.JIRA_URL.rstrip('/')}/rest/servicedeskapi/request"
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        auth = (settings.JIRA_USERNAME, settings.JIRA_API_TOKEN)
+
+        try:
+            # --- PRODUCTION MODE: ACTUAL POST ---
+            response = requests.post(
+                url, headers=headers, json=payload, auth=auth, timeout=15
+            )
+
+            # Log technical details to console
+            print(f"\n [JIRA API] Respuesta recibida (Status {response.status_code})")
+
+            if response.status_code == 201:
+                data = response.json()
+                issue_key = data.get("issueKey", "Desconocido")
+                return f"¡Éxito! El incidente ha sido reportado con el número de ticket: {issue_key}."
+
+            # --- ERROR HANDLING ---
+            error_msg = response.text
+            print(f" [DEBUG JIRA] Error técnico: {error_msg}")
+
+            if response.status_code == 400:
+                return "Hubo un problema con los datos proporcionados. Por favor, verifica la información."
+            elif response.status_code in [401, 403]:
+                return "Lo siento, hay un problema de permisos en nuestro sistema de soporte."
+            else:
+                return "Lo siento, hubo un error interno al intentar conectar con Jira. Por favor, intenta más tarde."
+
+        except requests.exceptions.Timeout:
+            print(" [DEBUG JIRA] Error: Tiempo de espera agotado.")
+            return "La conexión con Jira tardó demasiado. Por favor, reintenta en unos momentos."
+        except Exception as e:
+            print(f"\n [DEBUG JIRA] Error inesperado: {str(e)}")
+            return "Lo siento, hubo un error inesperado al procesar tu solicitud."
+
 
 jira_service = JiraService()

@@ -11,7 +11,7 @@ def test_get_issue_by_reporter():
     issue_key = "SOP-10336"
 
     customer = jira_service.get_customer_by_detail_field(
-        "Teléfono asociado", "1156570822"
+        "Teléfono asociado", "1161714988"
     )
 
     customer_context = customer.get("customers", [])[0]
