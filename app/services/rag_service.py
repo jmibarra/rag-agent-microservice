@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from app.services.llm_factory import LLMFactory
 from app.services.vector_store import get_vector_store
 from app.services.jira_service import jira_service
+from app.services.prompt_loader import load_prompt, render_prompt
 
 
 def _format_chat_history(history: list) -> list:
@@ -32,15 +33,8 @@ def create_jira_ticket(
     customer_id: str = None,
 ) -> str:
     """
-    CRITICAL: DO NOT INVENT OR GUESS PARAMETERS.
-    DO NOT CALL THIS TOOL UNLESS THE USER HAS FILLED THE FORM AND EXPLICITLY CONFIRMED.
-
-    Parameters:
-    - summary: The text provided by the user for 'Resumen'.
-    - description: The text provided by the user for 'Descripción'.
-    - producto_id: The ID corresponding to 'Producto'.
-    - proceso_id: The ID corresponding to 'Proceso afectado'.
-    - afectacion_id: The ID corresponding to 'Nivel de afectación'.
+    Crea un ticket de incidente en Jira Service Management.
+    La descripción completa para el LLM se carga desde tool_create_ticket.md.
     """
     # Lógica de negocio movida al tool para mantener la primitiva limpia
     payload = {
@@ -69,6 +63,9 @@ def create_jira_ticket(
     # Llamada directa a la primitiva
     return jira_service.create_customer_request(payload)
 
+# Se sobreescribe la descripción del tool con el contenido del template externo
+# para que el LLM reciba las instrucciones detalladas al invocar la herramienta
+create_jira_ticket.description = load_prompt("tool_create_ticket.md")
 
 def generate_response(
     query: str, chat_history: list = None, customer_context: str = None
@@ -78,11 +75,11 @@ def generate_response(
     vector_store = get_vector_store()
     retriever = vector_store.as_retriever(search_kwargs={"k": 4})
 
-    # Tool de busqueda en Docs
+    # Tool de búsqueda en Docs (descripción cargada desde template externo)
     retriever_tool = create_retriever_tool(
         retriever,
         "search_internal_docs",
-        "Search internal documentation to answer user queries. Always use this first before creating a ticket unless explicitly asked to create a ticket.",
+        load_prompt("tool_search_docs.md"),
     )
 
     tools = [retriever_tool, create_jira_ticket]
@@ -92,18 +89,9 @@ def generate_response(
         "IDENTIFICADO" if user_registered else "ANÓNIMO (SIN ACCESO A TICKETS)"
     )
 
-    security_rules = ""
-    if user_registered:
-        security_rules = (
-            "1. El usuario está IDENTIFICADO. NUNCA digas que su número no está registrado.\n"
-            "2. Si la información de un ticket de Jira no es encontrada, informa que parece no estar asociado a su cuenta.\n"
-            "3. Puedes dar detalles de tickets de Jira si la información está disponible."
-        )
-    else:
-        security_rules = (
-            "1. El usuario es 'ANÓNIMO'. TIENES PROHIBIDO dar detalles de tickets de Jira o crear tickets.\n"
-            "2. Responde EXACTAMENTE: 'Lo siento, no tienes acceso a esa información ya que tu número no está registrado en nuestro sistema.'"
-        )
+    # Reglas de seguridad cargadas desde templates externos según tipo de usuario
+    security_file = "security_registered.md" if user_registered else "security_anonymous.md"
+    security_rules = load_prompt(security_file)
 
     # -- DYNAMIC METADATA --
     meta = jira_service.get_incident_fields_meta()
@@ -127,34 +115,17 @@ def generate_response(
     impacto_mapping = format_mapping(meta.get("impacto"))
     impacto_labels = format_labels(meta.get("impacto"))
 
-    system_prompt = (
-        "Eres un asistente de soporte técnico. TU PRIORIDAD ES SEGUIR EL FLUJO SIN ADIVINAR.\n"
-        f"ESTADO ACTUAL DEL USUARIO: {user_status_msg}\n\n"
-        "REGLA DE ORO: TIENES PROHIBIDO USAR LA HERRAMIENTA `create_jira_ticket` CON DATOS INVENTADOS O SIN CONFIRMACIÓN.\n\n"
-        "MAPEO DE OPCIONES (Usa el ID correspondiente al llamar a la herramienta):\n"
-        f"PRODUCTOS:\n{producto_mapping}\n"
-        f"PROCESOS:\n{proceso_mapping}\n"
-        f"AFECTACIÓN:\n{impacto_mapping}\n\n"
-        "FLUJO DE TRABAJO OBLIGATORIO:\n"
-        "1. Revisa SIEMPRE el `chat_history` para ver si el usuario ya respondió a preguntas anteriores.\n"
-        "2. Intenta SIEMPRE resolver la duda usando `search_internal_docs`.\n"
-        "3. Si no se resuelve o el ticket no es encontrado, PROPÓN crear un 'Incidente'.\n"
-        "4. SI EL USUARIO TODAVÍA NO HA DADO LOS DATOS (revisa la historia), envía este formulario EXACTO:\n"
-        "   'Para proceder con la creación del incidente, necesitaré que me proporciones la siguiente información obligatoria:\n"
-        "   1. Resumen corto del problema.\n"
-        "   2. Descripción detallada del evento.\n"
-        f"   3. Producto afectado (Opciones: {producto_labels}).\n"
-        f"   4. Proceso afectado (Opciones: {proceso_labels}).\n"
-        f"   5. Nivel de afectación (Opciones: {impacto_labels}).\n"
-        "   Por favor, proporciona la información solicitada para proceder.'\n"
-        "5. SI DETECTAS EN EL HISTORIAL QUE EL USUARIO YA DIO LOS 5 DATOS, muestra el resumen y PREGUNTA: '¿Deseas que cree el ticket con estos datos?'.\n"
-        "6. SOLO SI RESPONDE 'SÍ', llama a `create_jira_ticket` usando los IDs de opción correctos.\n\n"
-        "PROHIBICIONES CRÍTICAS:\n"
-        "- NO REPITAS el formulario si el usuario ya respondió los campos.\n"
-        "- NO INVENTES ningún dato.\n"
-        f"{security_rules}\n"
-        "4. PROHIBIDO CREAR TICKETS RECURSIVOS.\n"
-        "5. Responde SIEMPRE en Español."
+    # System prompt renderizado desde template externo con variables dinámicas
+    system_prompt = render_prompt(
+        "system_prompt.md",
+        user_status=user_status_msg,
+        producto_mapping=producto_mapping,
+        proceso_mapping=proceso_mapping,
+        impacto_mapping=impacto_mapping,
+        producto_labels=producto_labels,
+        proceso_labels=proceso_labels,
+        impacto_labels=impacto_labels,
+        security_rules=security_rules,
     )
 
     prompt = ChatPromptTemplate.from_messages(

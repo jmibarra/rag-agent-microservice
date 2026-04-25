@@ -20,7 +20,7 @@ class LLMFactory:
             if not settings.OPENAI_API_KEY:
                 raise ValueError("OPENAI_API_KEY is not set")
             return ChatOpenAI(
-                model_name="gpt-3.5-turbo", 
+                model_name="gpt-4o-mini", 
                 openai_api_key=settings.OPENAI_API_KEY,
                 temperature=0
             )
