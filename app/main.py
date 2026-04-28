@@ -2,11 +2,19 @@ from fastapi import FastAPI, Depends
 from app.core.config import settings
 from app.core.security import get_api_key
 
-app = FastAPI(title=settings.APP_NAME)
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.VERSION,
+    description="Backend para Agente RAG con integración a Jira y Confluence"
+)
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "app_name": settings.APP_NAME,
+        "version": settings.VERSION
+    }
 
 from app.api import routes
 app.include_router(routes.router, prefix=settings.API_V1_STR) # dependencies=[Depends(get_api_key)] is already on the router, but adding here is fine too or duplicate. 

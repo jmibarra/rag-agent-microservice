@@ -1,4 +1,4 @@
-# RAG Agent Microservice 🤖🚀
+# RAG Agent Microservice `v1.0.0` 🤖🚀
 
 Este microservicio es el núcleo de inteligencia para un agente de soporte automatizado. Utiliza una arquitectura **RAG (Retrieval-Augmented Generation)** para proporcionar respuestas precisas basadas en conocimiento interno, integrado directamente con el ecosistema de Atlassian y canales de mensajería.
 
