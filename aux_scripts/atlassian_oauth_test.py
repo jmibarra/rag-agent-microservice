@@ -14,7 +14,6 @@ from app.core.config import settings
 # CONFIGURACIÓN
 # ==========================================
 CLIENT_ID = settings.JSM_CLIENT_ID
-# ¡IMPORTANTE! Asegúrate de que este Secret sea el actual de la consola de Atlassian
 CLIENT_SECRET = settings.JSM_CLIENT_SECRET
 # Esta URL debe estar registrada en "Authorization" > "Callback URL" en la consola
 CALLBACK_URL = 'http://localhost:8080/callback' 

@@ -17,13 +17,18 @@ pip install -r requirements.txt
 Verifica que el archivo `.env` tenga las claves configuradas correctamente:
 
 - `API_KEY`: La clave de seguridad para las peticiones (Header `X-API-KEY`).
-- `OPENAI_API_KEY` o `GOOGLE_API_KEY`.
-- Credenciales de Confluence (`CONFLUENCE_URL`, `CONFLUENCE_USERNAME`, `CONFLUENCE_API_TOKEN`).
+- `LLM_PROVIDER`: Define el proveedor del modelo (`openai` o `gemini`).
+- `OPENAI_API_KEY` o `GOOGLE_API_KEY`: Según el proveedor elegido.
+- `CONFLUENCE_URL`, `CONFLUENCE_USERNAME`, `CONFLUENCE_API_TOKEN`: Credenciales para la ingesta de documentos.
+- `JIRA_URL`, `JIRA_USERNAME`, `JIRA_API_TOKEN`: Credenciales para la consulta y creación de tickets.
+- `JIRA_ALLOWED_PROJECTS`: Lista de keys de proyectos permitidos (ej: `["SOP", "IT"]`). El agente solo podrá leer/actuar sobre estos proyectos.
 - `TWILIO_AUTH_TOKEN`: Token de autenticación de Twilio para validar webhooks.
-- Parametría para clientes de Jira Service Management (`JSM_CLOUD_ID`, `JSM_CLIENT_ID`, `JSM_CLIENT_SECRET`, `JSM_INITIAL_REFRESH_TOKEN`).
+- `JSM_CLOUD_ID`, `JSM_CLIENT_ID`, `JSM_CLIENT_SECRET`, `JSM_INITIAL_REFRESH_TOKEN`: Parametría para la integración con Jira Service Management.
 
 ### 1.1 Autorización de Jira Service Management (OAuth 2.0)
+
 Para poder usar la integración con JSM (por ejemplo, buscar un usuario por su teléfono), el servicio requiere un Refresh Token inicial:
+
 1. Asegúrate de tener tu `JSM_CLIENT_ID` y `JSM_CLIENT_SECRET` en el `.env`.
 2. Corre el script interactivo para autorizar la integración por única vez: `python aux_scripts/atlassian_oauth_test.py`.
 3. Esto abrirá tu navegador. Concede los permisos y vuelve a la terminal.
@@ -57,7 +62,7 @@ Este endpoint descarga páginas de Confluence y las guarda en la base de datos v
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/ingest \
-  -H "X-API-KEY: Z9gAWAb61kBapfmuHUvbZM4wmoZJLxkhWWyhUKZMeiM" \
+  -H "X-API-KEY: TU_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "space_key": "DS",
@@ -75,9 +80,10 @@ Este endpoint recibe una pregunta, busca contexto en la base de datos y genera u
 - **Header**: `X-API-KEY`
 
 **Ejemplo de consulta normal:**
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/chat \
-  -H "X-API-KEY: Z9gAWAb61kBapfmuHUvbZM4wmoZJLxkhWWyhUKZMeiM" \
+  -H "X-API-KEY: TU_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "message": "¿Cómo configuro mi correo electrónico?",
@@ -86,15 +92,18 @@ curl -X POST http://localhost:8000/api/v1/chat \
 ```
 
 **Ejemplo solicitando creación de ticket:**
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/chat \
-  -H "X-API-KEY: Z9gAWAb61kBapfmuHUvbZM4wmoZJLxkhWWyhUKZMeiM" \
+  -H "X-API-KEY: TU_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "message": "Mi computadora no enciende. Por favor, crea un ticket para el área de soporte con urgencia.",
     "history": []
   }'
 ```
+
+_Nota: Para que el agente pueda crear un ticket exitosamente, necesita conocer la identidad del usuario (email o ID de JSM). En el endpoint de Chat, esto se asume a través del contexto o la historia. En el Webhook de WhatsApp, esto ocurre automáticamente._
 
 ### C. Webhook (WhatsApp/Twilio)
 
@@ -118,7 +127,14 @@ _Respuesta esperada (con token activo y sin firma):_ `403 Forbidden`
 
 _Respuesta esperada (sin token configurado o con firma válida):_ XML de Twilio con la respuesta del agente.
 
+**Identificación Automática de Clientes:**
+Cuando un mensaje llega vía WhatsApp, el microservicio extrae el número de teléfono y realiza una búsqueda en Jira Service Management utilizando el campo "Teléfono asociado".
+
+- Si el cliente es encontrado: El agente recibe su nombre, email e ID, permitiéndole saludarlo por su nombre y ver el estado de sus tickets abiertos.
+- Si el cliente NO es encontrado: El agente responderá de forma anónima y no tendrá permisos para crear tickets o consultar información privada.
+
 ### D. Búsqueda de un Cliente en Jira Service Management (CSM)
+
 Puedes usar scripts sueltos de utilería para testear por consola la conexión a la API de Jira y asegurarte de tener sincronizado tu `JSM_CLOUD_ID`:
 
 1. **Obtener lista de Detail Fields configurados en tu tenant:**
@@ -132,4 +148,5 @@ Puedes usar scripts sueltos de utilería para testear por consola la conexión a
 
 - **Error 500 en Ingesta**: Verifica que `lxml` esté instalado y que las credenciales de Confluence en `.env` sean correctas (el API Token debe ser válido).
 - **Error 403 Forbidden**: Verifica que el header `X-API-KEY` coincida exactamente con lo que tienes en `.env`.
-- **LangChain/Pydantic Error**: Asegúrate de estar usando una versión de Python compatible (3.10 - 3.12) y no la 3.14 (experimental).
+- **Problemas con Tokens de JSM**: Si la integración con Jira falla repetidamente, puedes intentar borrar el archivo `data/jsm_tokens.json` y volver a configurar el `JSM_INITIAL_REFRESH_TOKEN` siguiendo el paso 1.1.
+- **LangChain/Pydantic Error**: Asegúrate de estar usando una versión de Python compatible (3.10 - 3.12).

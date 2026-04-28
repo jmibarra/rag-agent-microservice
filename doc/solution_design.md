@@ -6,14 +6,14 @@ Desarrollar un microservicio API RAG (Generación Aumentada por Recuperación) p
 
 ## Stack Tecnológico y Justificación
 
-**Core**
+### Core
 
 - **Lenguaje**: Python 3.10+
   - _Por qué_: Estándar de la industria para IA/ML, vasto ecosistema de librerías.
 - **Framework Web**: FastAPI
   - _Por qué_: Moderno, alto rendimiento, soporte nativo asíncrono (crítico para llamadas de bloqueo de E/S de LLM) y generación automática de OpenAPI (Swagger), esencial para la integración con Atlassian Forge.
 
-**IA y RAG**
+### IA y RAG
 
 - **Orquestación**: LangChain
   - _Por qué_: Simplifica el cambio entre modelos (OpenAI vs Gemini), proporciona cargadores nativos para Confluence y utilidades para construir cadenas RAG.
@@ -24,7 +24,7 @@ Desarrollar un microservicio API RAG (Generación Aumentada por Recuperación) p
   - Google Gemini (gemini-pro)
   - _Configuración_: Gestionada mediante Variable de Entorno (`LLM_PROVIDER=openai|gemini`).
 
-**Integración**
+### Integración
 
 - **Confluence**: API REST de Atlassian vía `ConfluenceLoader` de LangChain.
   - _Requiere_: URL de la instancia, Nombre de usuario y Token de API.
@@ -37,36 +37,38 @@ El sistema implementa dos flujos principales:
 
 _Disparador_: Endpoint administrativo o tarea programada (cron job).
 
-1.  **Conectar**: Autenticarse con Confluence.
-2.  **Cargar**: Descargar páginas de espacios específicos.
-3.  **Dividir**: Fragmentar el texto en partes manejables.
-4.  **Incrustar (Embed)**: Generar incrustaciones vectoriales para los fragmentos.
-5.  **Almacenar**: Persistir fragmentos e incrustaciones en ChromaDB en disco.
+1.**Conectar**: Autenticarse con Confluence.
+2.**Cargar**: Descargar páginas de espacios específicos.
+3.**Dividir**: Fragmentar el texto en partes manejables.
+4.**Incrustar (Embed)**: Generar incrustaciones vectoriales para los fragmentos.
+5.**Almacenar**: Persistir fragmentos e incrustaciones en ChromaDB en disco.
 
 ### 2. Flujo de Chat y Agente RAG
 
 _Disparador_: `POST /api/v1/chat` (desde Forge) o vía Webhook.
 _Entrada_: `{ "message": "...", "history": [...] }`
 
-1.  **Recibir**: Aceptar el prompt del usuario.
-2.  **Contextualizar Jira**: Se busca información de tickets mencionados y el contexto del perfil de cliente JSM asociado.
-3.  **Ejecutar Agente (AgentExecutor)**: Se inicializa un agente con acceso a diversas herramientas (*Tool Calling*).
-4.  **Decidir y Accionar (Tools)**:
-    -   `search_internal_docs`: El agente procesa la pregunta y realiza búsquedas de documentos relevantes en ChromaDB (flujo RAG tradicional).
-    -   `create_jira_ticket`: Si no halla respuesta o si el usuario solicita explícitamente abrir un ticket, el agente extrae los metadatos del cliente e invoca la API REST de Jira para generar automáticamente una consulta en Service Management.
-5.  **Responder**: Devolver la respuesta generada por el LLM describiendo qué acción se tomó o el contenido hallado.
+1. **Recibir**: Aceptar el prompt del usuario.
+2. **Contextualizar Jira**: Se busca información de tickets mencionados y el contexto del perfil de cliente JSM asociado.
+3. **Ejecutar Agente (AgentExecutor)**: Se inicializa un agente con acceso a diversas herramientas (_Tool Calling_).
+4. **Decidir y Accionar (Tools)**:
+    - `search_internal_docs`: El agente procesa la pregunta y realiza búsquedas de documentos relevantes en ChromaDB (flujo RAG tradicional).
+    - `create_jira_ticket`: Si no halla respuesta o si el usuario solicita explícitamente abrir un ticket, el agente extrae los metadatos del cliente e invoca la API REST de Jira para generar automáticamente una consulta en Service Management.
+5. **Responder**: Devolver la respuesta generada por el LLM describiendo qué acción se tomó o el contenido hallado.
 
 ### 3. Flujo de Webhook (WhatsApp)
 
 _Disparador_: `POST /api/v1/webhook` (desde Twilio).
 
-1.  **Validar**: Verificar firma `X-Twilio-Signature` contra `TWILIO_AUTH_TOKEN`.
-2.  **Procesar**: Extraer cuerpo del mensaje y remitente.
-3.  **Consultar**: Invocar lógica de RAG (`generate_response`).
-4.  **Responder**: Devolver TwiML (XML) con la respuesta para WhatsApp/SMS.
+1. **Validar**: Verificar firma `X-Twilio-Signature` contra `TWILIO_AUTH_TOKEN`.
+2. **Procesar**: Extraer cuerpo del mensaje y remitente.
+3. **Consultar**: Invocar lógica de RAG (`generate_response`).
+4. **Responder**: Devolver TwiML (XML) con la respuesta para WhatsApp/SMS.
 
 ### 4. Flujo Jira Service Management (CSM) API
+
 Permite buscar perfiles de clientes de JSM directamente por cualquier campo adicional (Detalle), y proporciona la capacidad de abrir solicitudes en nombre de los clientes.
+
 - **Gestión OAuth 2.0**: Automatizada a través de la clase `JsmOAuthManager`. Al iniciarse, lee una semilla (Refresh Token) enviada vía entorno o un Token válido almacenado temporalmente en disco. Antes de realizar peticiones a la API, recicla los Tokens expirados transparentemente.
 - **Consultas (JiraService)**: Abstrae el uso de los Tokens generados para interactuar vía REST con endpoints exclusivos de JSM como `customer/search-by-detail-field`.
 - **Creación de Tickets**: Soporta realizar peticiones autenticadas hacia los endpoints directos `/rest/servicedeskapi/request` para crear solicitudes a pedido del usuario y enlazar el ID del usuario directamente usando `raiseOnBehalfOf`.
